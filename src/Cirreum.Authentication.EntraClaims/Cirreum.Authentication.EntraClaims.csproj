@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>Cirreum.Authentication.EntraClaims</RootNamespace>
+    <Description>Entra External ID custom authentication extension for token enrichment (onTokenIssuanceStart). Provides a configurable anonymous endpoint that validates Entra callbacks and returns custom role claims for new user sign-ups.</Description>
+    <PackageTags>entra;authentication;claims;blazor;minimal-api</PackageTags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.IdentityModel.Protocols.OpenIdConnect" Version="8.*" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem:*)",
+      "Bash(dir:*)",
+      "Bash(test:*)"
+    ]
+  }
+}

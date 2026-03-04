@@ -80,7 +80,12 @@ internal sealed class EntraClaimsHandler(
 			}
 		};
 
-		return Results.Ok(response);
+		var json = System.Text.Json.JsonSerializer.Serialize(
+			response,
+			EntraClaimsJsonContext.Default.EntraClaimsResponse);
+
+		return Results.Content(json, "application/json");
+
 	}
 
 }

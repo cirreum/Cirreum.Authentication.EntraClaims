@@ -36,25 +36,27 @@ app.MapEntraClaims();
 {
   "EntraClaims": {
     "Route": "/auth/entra/claims",
-    "ClientId": "<your-api-app-registration-client-id>",
-    "Issuer": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+    "ClientId": "<claims-provider-app-client-id>",
+    "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
     "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
-    "MetadataEndpoint": "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-    "DefaultRole": "Member",
-    "AllowedAppIds": "<spa-client-id>,<other-app-id>"
+    "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+    "DefaultRole": "app:user",
+    "AllowedAppIds": "<client-app-id>"
   }
 }
 ```
 
 | Setting | Description |
 |---|---|
-| `Route` | The endpoint path. Defaults to `/auth/entra/claims`. |
-| `ClientId` | Your API's Entra App Registration Client ID (validated as `aud`). |
-| `Issuer` | Your Entra tenant's token issuer URL (validated as `iss`). |
-| `EntraAppId` | The Microsoft authentication events API app ID (validated as `appid`/`azp`). Typically `99045fe1-7639-4a75-9d4a-577b6ca3810f` for Entra External ID. |
+| `Route` | The endpoint path. Defaults to `/auth/entra/claims`. Must match the Target URL on the custom extension. |
+| `ClientId` | The Application (client) ID of your **custom claims provider** app registration (validated as `aud`). |
+| `Issuer` | Your Entra External ID tenant issuer. Use the tenant ID subdomain format: `https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0`. |
+| `EntraAppId` | The Microsoft authentication events API app ID (validated as `appid`/`azp`). Fixed value `99045fe1-7639-4a75-9d4a-577b6ca3810f` for all Entra External ID tenants. |
 | `MetadataEndpoint` | OIDC discovery endpoint for fetching signing keys. |
 | `DefaultRole` | The custom role assigned to new users. |
-| `AllowedAppIds` | Comma or semicolon-separated app IDs allowed to trigger this endpoint. |
+| `AllowedAppIds` | Comma or semicolon-separated client app IDs allowed to trigger this endpoint. |
+
+> For full Azure Portal setup steps, ngrok local development guidance, and troubleshooting, see [SETUP.md](SETUP.md).
 
 ### Entra Portal Configuration
 

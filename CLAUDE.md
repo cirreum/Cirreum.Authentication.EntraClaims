@@ -67,17 +67,17 @@ Entra Portal POST → anonymous minimal API endpoint
 {
   "EntraClaims": {
     "Route": "/auth/entra/claims",
-    "ClientId": "<api-app-registration-client-id>",
-    "Issuer": "https://login.microsoftonline.com/<tenant-id>/v2.0",
+    "ClientId": "<claims-provider-app-client-id>",
+    "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
     "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
-    "MetadataEndpoint": "https://login.microsoftonline.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-    "DefaultRole": "Member",
-    "AllowedAppIds": "<spa-client-id>,<other-app-id>"
+    "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+    "DefaultRole": "app:user",
+    "AllowedAppIds": "<client-app-id>"
   }
 }
 ```
 
-`EntraAppId` is Microsoft's fixed authentication events API app ID for Entra External ID (`99045fe1-7639-4a75-9d4a-577b6ca3810f`). `AllowedAppIds` is comma- or semicolon-separated.
+`ClientId` is the **custom claims provider** app registration (not the client app). `EntraAppId` is Microsoft's fixed authentication events API app ID for Entra External ID (`99045fe1-7639-4a75-9d4a-577b6ca3810f`). `AllowedAppIds` is comma- or semicolon-separated. Issuer and MetadataEndpoint must use the **tenant ID subdomain** format (`<tenant-id>.ciamlogin.com`) — see SETUP.md for details.
 
 ### Security Design
 

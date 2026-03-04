@@ -34,14 +34,18 @@ app.MapEntraClaims();
 
 ```json
 {
-  "EntraClaims": {
-    "Route": "/auth/entra/claims",
-    "ClientId": "<claims-provider-app-client-id>",
-    "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
-    "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
-    "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-    "DefaultRole": "app:user",
-    "AllowedAppIds": "<client-app-id>"
+  "Cirreum": {
+    "Authentication": {
+      "EntraClaims": {
+        "Route": "/auth/entra/claims",
+        "ClientId": "<claims-provider-app-client-id>",
+        "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
+        "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
+        "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+        "DefaultRole": "app:user",
+        "AllowedAppIds": "<client-app-id>"
+      }
+    }
   }
 }
 ```

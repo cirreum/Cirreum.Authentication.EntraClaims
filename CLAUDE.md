@@ -55,7 +55,7 @@ Entra Portal POST → anonymous minimal API endpoint
 | File | Type | Role |
 |---|---|---|
 | `EntraClaimsExtensions.cs` | static class | DI registration (`AddEntraClaims`) and endpoint mapping (`MapEntraClaims`) |
-| `EntraClaimsOptions.cs` | `sealed class` | Configuration bound from `"EntraClaims"` config section |
+| `EntraClaimsOptions.cs` | `sealed class` | Configuration bound from `"Cirreum:Authentication:EntraClaims"` config section |
 | `EntraTokenValidator.cs` | `internal sealed class` | Singleton; validates JWT using `ConfigurationManager<OpenIdConnectConfiguration>` for signing key caching |
 | `EntraClaimsHandler.cs` | `internal sealed class` | Scoped; orchestrates validation and builds the response |
 | `EntraClaimsRequest.cs` | `internal sealed record`s | Incoming payload DTOs |
@@ -65,14 +65,18 @@ Entra Portal POST → anonymous minimal API endpoint
 
 ```json
 {
-  "EntraClaims": {
-    "Route": "/auth/entra/claims",
-    "ClientId": "<claims-provider-app-client-id>",
-    "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
-    "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
-    "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-    "DefaultRole": "app:user",
-    "AllowedAppIds": "<client-app-id>"
+  "Cirreum": {
+    "Authentication": {
+      "EntraClaims": {
+        "Route": "/auth/entra/claims",
+        "ClientId": "<claims-provider-app-client-id>",
+        "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
+        "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
+        "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+        "DefaultRole": "app:user",
+        "AllowedAppIds": "<client-app-id>"
+      }
+    }
   }
 }
 ```

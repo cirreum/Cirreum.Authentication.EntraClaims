@@ -105,14 +105,18 @@ dotnet add package Cirreum.Authentication.EntraClaims
 Add the following to `appsettings.json`:
 
 ```json
-"EntraClaims": {
-    "Route": "/auth/entra/claims",
-    "ClientId": "<your-claims-provider-app-client-id>",
-    "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
-    "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
-    "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
-    "DefaultRole": "app:user",
-    "AllowedAppIds": "<client-app-id>"
+"Cirreum": {
+    "Authentication": {
+        "EntraClaims": {
+            "Route": "/auth/entra/claims",
+            "ClientId": "<your-claims-provider-app-client-id>",
+            "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0",
+            "MetadataEndpoint": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0/.well-known/openid-configuration",
+            "EntraAppId": "99045fe1-7639-4a75-9d4a-577b6ca3810f",
+            "DefaultRole": "app:user",
+            "AllowedAppIds": "<client-app-id>"
+        }
+    }
 }
 ```
 

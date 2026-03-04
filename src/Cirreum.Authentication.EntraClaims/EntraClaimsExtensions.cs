@@ -22,13 +22,13 @@ public static class EntraClaimsExtensions {
 	/// <param name="services">The service collection.</param>
 	/// <param name="configuration">The configuration root.</param>
 	/// <param name="sectionName">
-	/// The configuration section name. Defaults to <c>"EntraClaims"</c>.
+	/// The configuration section name. Defaults to <c>"Cirreum:Authentication:EntraClaims"</c>.
 	/// See SETUP.md Part 3 for the full configuration schema.
 	/// </param>
 	public static IServiceCollection AddEntraClaims(
 	  this IServiceCollection services,
 	  IConfiguration configuration,
-	  string sectionName = "EntraClaims") {
+	  string sectionName = "Cirreum:Authentication:EntraClaims") {
 
 		services.Configure<EntraClaimsOptions>(configuration.GetSection(sectionName));
 

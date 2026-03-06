@@ -6,7 +6,7 @@ namespace Cirreum.Authentication.EntraClaims;
 /// </summary>
 /// <remarks>
 /// Implement this interface on whatever user entity your application stores in its database.
-/// The base provisioner only reads <see cref="EntraUserId"/> for lookup and <see cref="Role"/>
+/// The base provisioner only reads <see cref="EntraUserId"/> for lookup and <see cref="Roles"/>
 /// for the issued token — all other fields on your type are invisible to this library.
 /// </remarks>
 /// <example>
@@ -15,7 +15,7 @@ namespace Cirreum.Authentication.EntraClaims;
 ///     public Guid Id { get; init; }
 ///     public string EntraUserId { get; init; } = "";  // stored as ExternalId
 ///     public string Email { get; init; } = "";
-///     public string Role { get; init; } = Roles.User;
+///     public IReadOnlyList&lt;string&gt; Roles { get; init; } = [AppRoles.User];
 ///     // ... other application fields
 /// }
 /// </code>
@@ -33,12 +33,13 @@ public interface IEntraProvisionedUser {
 	string EntraUserId { get; }
 
 	/// <summary>
-	/// Gets the role to embed in the issued token for this user.
+	/// Gets the roles to embed in the issued token for this user.
 	/// </summary>
 	/// <remarks>
-	/// Must be a non-empty string matching a role defined in your Entra app registration.
-	/// Use application-level constants (e.g. <c>Roles.Admin</c>) rather than magic strings.
+	/// Each value must be a non-empty string matching a role defined in your application.
+	/// Use application-level constants (e.g. <c>AppRoles.Admin</c>) rather than magic strings.
+	/// Most users have a single role; return a list with one entry for the common case.
 	/// </remarks>
-	string Role { get; }
+	IReadOnlyList<string> Roles { get; }
 
 }

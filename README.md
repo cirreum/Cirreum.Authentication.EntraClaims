@@ -79,14 +79,15 @@ app.MapEntraClaims();
 }
 ```
 
-| Setting | Description |
-|---|---|
-| `Route` | Endpoint path. Defaults to `/auth/entra/claims`. Must match the Target URL on the Custom Authentication Extension in the Azure Portal. |
-| `ClientId` | Application (client) ID of your **custom claims provider** app registration. Validated as the `aud` claim on the incoming bearer token. |
-| `Issuer` | Entra External ID tenant issuer. **Must** use the tenant ID subdomain format — do not use a domain name. |
-| `EntraAppId` | Microsoft's authentication events API app ID, validated as `appid`/`azp`. Fixed value `99045fe1-7639-4a75-9d4a-577b6ca3810f` for all Entra External ID tenants. |
-| `MetadataEndpoint` | OIDC discovery endpoint for fetching and caching signing keys. Use the tenant ID subdomain format. |
-| `AllowedAppIds` | Comma- or semicolon-separated list of client application IDs permitted to trigger this endpoint. |
+| Setting | Used by | Description |
+|---|---|---|
+| `Route` | Claims endpoint | Endpoint path. Defaults to `/auth/entra/claims`. Must match the Target URL on the Custom Authentication Extension in the Azure Portal. |
+| `ClientId` | Claims endpoint | Application (client) ID of your **custom claims provider** app registration. Validated as the `aud` claim on the incoming bearer token. |
+| `Issuer` | Both | Entra External ID tenant issuer. **Must** use the tenant ID subdomain format — do not use a domain name. Used as the default enrichment issuer when `EnrichmentIssuers` is not set. |
+| `EntraAppId` | Claims endpoint | Microsoft's authentication events API app ID, validated as `appid`/`azp`. Fixed value `99045fe1-7639-4a75-9d4a-577b6ca3810f` for all Entra External ID tenants. |
+| `MetadataEndpoint` | Claims endpoint | OIDC discovery endpoint for fetching and caching signing keys. Use the tenant ID subdomain format. |
+| `AllowedAppIds` | Claims endpoint | Comma- or semicolon-separated list of client application IDs permitted to trigger this endpoint. |
+| `EnrichmentIssuers` | Enrichment | Optional. Comma- or semicolon-separated list of token issuers for which `IEntraRoleResolver` performs a database lookup. Defaults to `Issuer` when not set. Use for multi-tenant scenarios or standalone enrichment. |
 
 > For full Azure Portal setup, ngrok local development guidance, and troubleshooting see [SETUP.md](SETUP.md).
 
@@ -151,7 +152,7 @@ public sealed class AppUserProvisioner(AppDbContext db) : EntraUserProvisionerBa
         }
         invitation.ClaimedAt = DateTimeOffset.UtcNow;
         invitation.ClaimedByEntraUserId = entraUserId;
-        var user = new AppUser { EntraUserId = entraUserId, Role = invitation.Role };
+        var user = new AppUser { EntraUserId = entraUserId, Roles = invitation.Roles };
         db.Users.Add(user);
         await db.SaveChangesAsync(cancellationToken);
         return user;
@@ -159,7 +160,7 @@ public sealed class AppUserProvisioner(AppDbContext db) : EntraUserProvisionerBa
 }
 ```
 
-`RedeemInvitationAsync` returns `null` to deny. Returning a user causes `ProvisionResult.Allow(user.Role)` to be issued.
+`RedeemInvitationAsync` returns `null` to deny. Returning a user causes `ProvisionResult.Allow(user.Roles)` to be issued.
 
 > **Atomicity:** Perform the invitation find, expiry check, and claim in a single database transaction to prevent concurrent logins from redeeming the same invitation twice.
 
@@ -170,7 +171,7 @@ Implement on your user entity so `EntraUserProvisionerBase<TUser>` can read the 
 ```csharp
 public record AppUser : IEntraProvisionedUser {
     public string EntraUserId { get; init; } = "";  // IEntraProvisionedUser
-    public string Role { get; init; } = "";          // IEntraProvisionedUser
+    public IReadOnlyList<string> Roles { get; init; } = [];  // IEntraProvisionedUser
     // ... your other fields
 }
 ```
@@ -195,25 +196,91 @@ public record Invitation : IEntraPendingInvitation {
 
 ---
 
+## API-Side Role Enrichment
+
+Entra External ID access tokens do not carry `roles` claims — the custom `customRoles` claim returned by the provisioner is present in the ID token only. To make role-based authorization work on your API (ASP.NET endpoint policies, Cirreum domain authorization), register the enrichment alongside your normal auth setup:
+
+### 1. Implement a role resolver
+
+```csharp
+public sealed class AppUserRoleResolver(IUserRepository users) : IEntraRoleResolver {
+
+    public async Task<IReadOnlyList<string>?> ResolveRolesAsync(
+        string entraUserId,
+        CancellationToken cancellationToken = default) {
+
+        var user = await users.FindByEntraIdAsync(entraUserId, cancellationToken);
+        if (user is null) {
+            return null;
+        }
+        return user.Roles;
+    }
+}
+```
+
+### 2. Register in Program.cs
+
+```csharp
+builder.AddEntraClaimsEnrichment<AppUserRoleResolver>();
+```
+
+### How it works
+
+`AddEntraClaimsEnrichment` registers an `IClaimsTransformation` that runs during `UseAuthentication()`, before `UseAuthorization()` evaluates endpoint policies:
+
+```
+Bearer token received
+  → JWT validated → ClaimsPrincipal built (no roles)
+  → EntraClaimsEnricher.TransformAsync()
+      → issuer matches Entra External ID tenant
+      → resolves role from your database by oid
+      → adds ClaimTypes.Role to ClaimsPrincipal
+  → UseAuthorization() → RequireRole() passes ✓
+  → domain authorization → HasRole() passes ✓
+```
+
+The result is cached in `HttpContext.Items` — `ResolveRoleAsync` is called at most once per request regardless of how many times ASP.NET re-evaluates authentication. Workforce and internal users (whose tokens already carry `roles` claims) are skipped entirely.
+
+### IEntraRoleResolver
+
+```csharp
+public interface IEntraRoleResolver {
+    Task<IReadOnlyList<string>?> ResolveRolesAsync(
+        string entraUserId,
+        CancellationToken cancellationToken = default);
+}
+```
+
+| Parameter | Description |
+|---|---|
+| `entraUserId` | The user's Entra object ID (`oid` claim). Matches `IEntraProvisionedUser.EntraUserId` written during Phase 1. |
+| Returns | One or more role strings, or `null` if the user does not exist. An empty list is treated the same as `null` — authorization policies that require a role will deny the request. |
+
+---
+
 ## Two-Phase Onboarding
 
 The provisioner handles **Phase 1** only — gating access and issuing the initial role claim. A complete onboarding flow looks like:
 
 ```
 Phase 1 — onTokenIssuanceStart (this library)
-  ├── RedeemInvitationAsync: mark invitation as Claimed, create user record
-  └── Return role → embedded in ID token
+  ├── RedeemInvitationAsync: mark invitation as Claimed, create user record with Role
+  └── Return role → embedded in ID token as customRoles
+
+API calls — role enrichment (this library, AddEntraClaimsEnrichment)
+  └── IEntraRoleResolver looks up user by oid → injects role into ClaimsPrincipal
+      → ASP.NET endpoint policies and Cirreum domain authorization work immediately ✓
 
 Phase 2 — in-app onboarding endpoint (your application)
   ├── Collect remaining profile data
-  ├── Call Microsoft Graph API to assign user to the Entra app role group
-  │   (required for the role to appear in the access token)
   └── Mark invitation as Redeemed
 ```
 
-**Why two phases?** The Entra user object may not exist yet when Phase 1 fires, and group membership changes do not propagate to access tokens instantly. Phase 2 completes after the user is inside the application.
+**Why two phases?** The Entra user object may not exist yet when Phase 1 fires. Phase 2 completes the user's profile after they are inside the application.
 
-During the gap between Phase 1 and Phase 2 completion, onboarding endpoints should use a minimal auth policy (authenticated user, no role requirement) to allow the user through before Graph API assignment is complete.
+**No Microsoft Graph API calls are required.** `AddEntraClaimsEnrichment` loads the role from your application's own data store — the same record created by the provisioner in Phase 1 — and injects it into the `ClaimsPrincipal` on every API request. Entra group membership is not needed.
+
+During the Phase 1 → Phase 2 window, onboarding endpoints should use a minimal auth policy (authenticated user, no role requirement) to allow the user through before profile collection is complete.
 
 ---
 
@@ -235,23 +302,72 @@ Entra POST → anonymous endpoint
 
 ## Advanced Registration
 
-### Factory overload
+### Factory overloads
 
 ```csharp
 builder.AddEntraClaims<AppUserProvisioner>(
     sp => new AppUserProvisioner(sp.GetRequiredService<AppDbContext>()));
+
+builder.AddEntraClaimsEnrichment<AppUserRoleResolver>(
+    sp => new AppUserRoleResolver(sp.GetRequiredService<IUserRepository>()));
 ```
 
-### IServiceCollection overload (for testing)
+### IServiceCollection overloads (for testing)
 
 ```csharp
 services.AddEntraClaims<AppUserProvisioner>(configuration);
+services.AddEntraClaimsEnrichment<AppUserRoleResolver>(configuration);
 ```
 
 ### Custom configuration section
 
 ```csharp
 builder.AddEntraClaims<AppUserProvisioner>("MyApp:EntraExtension");
+builder.AddEntraClaimsEnrichment<AppUserRoleResolver>("MyApp:EntraExtension");
+```
+
+### Using both on the same app
+
+```csharp
+// App that hosts the onTokenIssuanceStart endpoint AND validates External ID access tokens
+builder.AddEntraClaims<AppUserProvisioner>();
+builder.AddEntraClaimsEnrichment<AppUserRoleResolver>();
+```
+
+Both methods share the same configuration section. `services.Configure<EntraClaimsOptions>` is called by each — this is safe and idempotent.
+
+### Standalone enrichment (API only, no claims endpoint)
+
+`AddEntraClaimsEnrichment` works independently — no `AddEntraClaims` required. Only `Issuer` (or `EnrichmentIssuers`) needs to be configured:
+
+```json
+{
+  "Cirreum": {
+    "Authentication": {
+      "EntraClaims": {
+        "Issuer": "https://<tenant-id>.ciamlogin.com/<tenant-id>/v2.0"
+      }
+    }
+  }
+}
+```
+
+```csharp
+builder.AddEntraClaimsEnrichment<AppUserRoleResolver>();
+```
+
+### Multi-tenant enrichment
+
+```json
+{
+  "Cirreum": {
+    "Authentication": {
+      "EntraClaims": {
+        "EnrichmentIssuers": "https://<tenant-a>.ciamlogin.com/<tenant-a>/v2.0; https://<tenant-b>.ciamlogin.com/<tenant-b>/v2.0"
+      }
+    }
+  }
+}
 ```
 
 ---

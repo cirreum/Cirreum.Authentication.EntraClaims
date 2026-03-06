@@ -52,8 +52,35 @@ public sealed class EntraClaimsOptions {
 	public required string AllowedAppIds { get; set; }
 
 	/// <summary>
+	/// Optional comma or semicolon-separated list of token issuers for which
+	/// <see cref="IEntraRoleResolver"/> will perform a database role lookup.
+	/// Defaults to <see cref="Issuer"/> when not specified.
+	/// </summary>
+	/// <remarks>
+	/// Use this when <c>AddEntraClaimsEnrichment</c> is used independently of
+	/// <c>AddEntraClaims</c>, or when the enricher must cover multiple Entra
+	/// External ID tenants. Workforce tokens (e.g. <c>login.microsoftonline.com</c>)
+	/// that already carry <c>roles</c> claims are always skipped regardless of this setting.
+	/// </remarks>
+	public string? EnrichmentIssuers { get; set; }
+
+	/// <summary>
 	/// Parses AllowedAppIds into a set for fast lookup.
 	/// </summary>
 	internal HashSet<string> GetAllowedAppIdSet() =>
 	  [.. this.AllowedAppIds.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+
+	/// <summary>
+	/// Resolves the set of issuers for which the enricher performs a database role lookup.
+	/// Uses <see cref="EnrichmentIssuers"/> if set, otherwise falls back to <see cref="Issuer"/>.
+	/// </summary>
+	internal HashSet<string> GetEnrichmentIssuerSet() {
+		var source = string.IsNullOrWhiteSpace(this.EnrichmentIssuers)
+			? this.Issuer
+			: this.EnrichmentIssuers;
+		if (string.IsNullOrWhiteSpace(source)) {
+			return [];
+		}
+		return [.. source.Split([',', ';'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)];
+	}
 }

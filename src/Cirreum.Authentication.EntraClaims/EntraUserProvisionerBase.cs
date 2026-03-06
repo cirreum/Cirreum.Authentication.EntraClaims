@@ -61,7 +61,7 @@ namespace Cirreum.Authentication.EntraClaims;
 ///         }
 ///         invitation.ClaimedAt = DateTimeOffset.UtcNow;
 ///         invitation.ClaimedByEntraUserId = entraUserId;
-///         var user = new AppUser { EntraUserId = entraUserId, Role = invitation.Role };
+///         var user = new AppUser { EntraUserId = entraUserId, Roles = invitation.Roles };
 ///         db.Users.Add(user);
 ///         await db.SaveChangesAsync(cancellationToken);
 ///         return user;
@@ -84,7 +84,7 @@ public abstract class EntraUserProvisionerBase<TUser> : IEntraUserProvisioner
 
 		var user = await this.FindUserAsync(context.EntraUserId, cancellationToken);
 		if (user is not null) {
-			return ProvisionResult.Allow(user.Role);
+			return ProvisionResult.Allow(user.Roles);
 		}
 
 		if (string.IsNullOrWhiteSpace(context.Email)) {
@@ -93,7 +93,7 @@ public abstract class EntraUserProvisionerBase<TUser> : IEntraUserProvisioner
 
 		var newUser = await this.RedeemInvitationAsync(context.Email, context.EntraUserId, cancellationToken);
 		return newUser is not null
-			? ProvisionResult.Allow(newUser.Role)
+			? ProvisionResult.Allow(newUser.Roles)
 			: ProvisionResult.Deny();
 	}
 
@@ -129,7 +129,7 @@ public abstract class EntraUserProvisionerBase<TUser> : IEntraUserProvisioner
 	/// The newly created user record if a valid invitation was found and successfully claimed,
 	/// or <see langword="null"/> if no matching invitation exists, it has expired, or it has
 	/// already been claimed.
-	/// The base class reads <see cref="IEntraProvisionedUser.Role"/> from the returned
+	/// The base class reads <see cref="IEntraProvisionedUser.Roles"/> from the returned
 	/// instance to populate the issued token.
 	/// </returns>
 	/// <remarks>

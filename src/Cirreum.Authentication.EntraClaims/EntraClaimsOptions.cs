@@ -46,11 +46,6 @@ public sealed class EntraClaimsOptions {
 	public required string MetadataEndpoint { get; set; }
 
 	/// <summary>
-	/// The default custom role assigned to new users during sign-up.
-	/// </summary>
-	public required string DefaultRole { get; set; }
-
-	/// <summary>
 	/// Comma or semicolon-separated list of allowed application IDs
 	/// that can trigger this claims endpoint.
 	/// </summary>

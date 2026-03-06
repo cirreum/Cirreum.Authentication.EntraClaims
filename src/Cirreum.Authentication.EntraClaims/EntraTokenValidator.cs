@@ -12,65 +12,57 @@ using System.IdentityModel.Tokens.Jwt;
 /// onTokenIssuanceStart custom authentication extension callback.
 /// Uses OIDC discovery to fetch and cache Microsoft's signing keys.
 /// </summary>
-internal sealed class EntraTokenValidator {
+internal sealed class EntraTokenValidator(
+	IOptions<EntraClaimsOptions> options,
+	ILogger<EntraTokenValidator> logger) {
 
-  private readonly ConfigurationManager<OpenIdConnectConfiguration> _configManager;
-  private readonly EntraClaimsOptions _options;
-  private readonly ILogger<EntraTokenValidator> _logger;
+	private readonly EntraClaimsOptions _options = options.Value;
+	private readonly ConfigurationManager<OpenIdConnectConfiguration> _configManager = new(
+		options.Value.MetadataEndpoint,
+		new OpenIdConnectConfigurationRetriever(),
+		new HttpDocumentRetriever());
 
-  public EntraTokenValidator(
-    IOptions<EntraClaimsOptions> options,
-    ILogger<EntraTokenValidator> logger) {
+	public async Task<bool> ValidateAsync(string token, CancellationToken cancellationToken = default) {
+		try {
+			var config = await _configManager.GetConfigurationAsync(cancellationToken);
 
-    _options = options.Value;
-    _logger = logger;
+			var validationParameters = new TokenValidationParameters {
+				ValidateIssuer = true,
+				ValidIssuer = _options.Issuer,
+				ValidateAudience = true,
+				ValidAudience = _options.ClientId,
+				ValidateIssuerSigningKey = true,
+				IssuerSigningKeys = config.SigningKeys,
+				ValidateLifetime = true,
+				ClockSkew = TimeSpan.FromMinutes(5)
+			};
 
-    _configManager = new ConfigurationManager<OpenIdConnectConfiguration>(
-      _options.MetadataEndpoint,
-      new OpenIdConnectConfigurationRetriever(),
-      new HttpDocumentRetriever());
-  }
+			var handler = new JwtSecurityTokenHandler();
+			handler.ValidateToken(token, validationParameters, out var validatedToken);
 
-  public async Task<bool> ValidateAsync(string token) {
-    try {
-      var config = await _configManager.GetConfigurationAsync(CancellationToken.None);
+			if (validatedToken is not JwtSecurityToken jwt) {
+				logger.LogWarning("Token is not a valid JWT");
+				return false;
+			}
 
-      var validationParameters = new TokenValidationParameters {
-        ValidateIssuer = true,
-        ValidIssuer = _options.Issuer,
-        ValidateAudience = true,
-        ValidAudience = _options.ClientId,
-        ValidateIssuerSigningKey = true,
-        IssuerSigningKeys = config.SigningKeys,
-        ValidateLifetime = true,
-        ClockSkew = TimeSpan.FromMinutes(5)
-      };
+			// Validate appid (v1) or azp (v2) matches the Entra service app ID
+			var appId = jwt.Claims.FirstOrDefault(c => c.Type is "appid")?.Value
+				?? jwt.Claims.FirstOrDefault(c => c.Type is "azp")?.Value;
 
-      var handler = new JwtSecurityTokenHandler();
-      var principal = handler.ValidateToken(token, validationParameters, out var validatedToken);
+			if (appId != _options.EntraAppId) {
+				logger.LogWarning("Token appid/azp '{AppId}' does not match expected '{Expected}'", appId, _options.EntraAppId);
+				return false;
+			}
 
-      if (validatedToken is not JwtSecurityToken jwt) {
-        _logger.LogWarning("Token is not a valid JWT");
-        return false;
-      }
+			return true;
 
-      // Validate appid (v1) or azp (v2) matches the Entra service app ID
-      var appId = jwt.Claims.FirstOrDefault(c => c.Type is "appid")?.Value
-        ?? jwt.Claims.FirstOrDefault(c => c.Type is "azp")?.Value;
+		} catch (SecurityTokenValidationException ex) {
+			logger.LogWarning(ex, "Token validation failed: {Message}", ex.Message);
+			return false;
+		} catch (Exception ex) {
+			logger.LogError(ex, "Unexpected error during token validation: {Message}", ex.Message);
+			return false;
+		}
+	}
 
-      if (appId != _options.EntraAppId) {
-        _logger.LogWarning("Token appid/azp '{AppId}' does not match expected '{Expected}'", appId, _options.EntraAppId);
-        return false;
-      }
-
-      return true;
-
-    } catch (SecurityTokenValidationException ex) {
-      _logger.LogWarning(ex, "Token validation failed: {Message}", ex.Message);
-      return false;
-    } catch (Exception ex) {
-      _logger.LogError(ex, "Unexpected error during token validation: {Message}", ex.Message);
-      return false;
-    }
-  }
 }

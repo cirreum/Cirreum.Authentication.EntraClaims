@@ -2,81 +2,133 @@ namespace Cirreum.Authentication.EntraClaims;
 
 using Cirreum.Authentication.EntraClaims.Models;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 /// <summary>
 /// Handles the Entra External ID onTokenIssuanceStart callback.
 /// Validates the bearer token, verifies the calling app is allowed,
-/// and returns a default custom role claim for new user sign-ups.
+/// provisions the user via <see cref="IEntraUserProvisioner"/>,
+/// and returns initial role claims for the issued token.
 /// </summary>
-internal sealed class EntraClaimsHandler(
-  EntraTokenValidator tokenValidator,
-  IOptions<EntraClaimsOptions> options,
-  ILogger<EntraClaimsHandler> logger
+internal sealed partial class EntraClaimsHandler(
+	EntraTokenValidator tokenValidator,
+	IOptions<EntraClaimsOptions> options,
+	IServiceProvider services,
+	ILogger<EntraClaimsHandler> logger
 ) {
 
-	public async Task<IResult> HandleAsync(HttpRequest request) {
+	public async Task<IResult> HandleAsync(HttpRequest request, CancellationToken cancellationToken = default) {
 
-		// Extract and validate bearer token
+		// -------------------------------------------------------------------------
+		// 1. Validate bearer token
+		// -------------------------------------------------------------------------
+
 		if (!request.Headers.TryGetValue("Authorization", out var authHeader)
-		  || string.IsNullOrWhiteSpace(authHeader)) {
-			logger.LogWarning("Missing Authorization header");
+			|| string.IsNullOrWhiteSpace(authHeader)) {
+			Log.MissingAuthorizationHeader(logger);
 			return Results.Unauthorized();
 		}
 
 		var token = authHeader.ToString().Replace("Bearer ", "", StringComparison.OrdinalIgnoreCase);
-		if (!await tokenValidator.ValidateAsync(token)) {
-			logger.LogWarning("Invalid Authorization token");
+		if (!await tokenValidator.ValidateAsync(token, cancellationToken)) {
+			Log.InvalidToken(logger);
 			return Results.Unauthorized();
 		}
 
-		// Deserialize the Entra callback payload
-		var payload = await request.ReadFromJsonAsync<EntraClaimsRequest>();
+		// -------------------------------------------------------------------------
+		// 2. Deserialize payload
+		// -------------------------------------------------------------------------
+
+		var payload = await request.ReadFromJsonAsync<EntraClaimsRequest>(cancellationToken);
 		if (payload is null) {
-			logger.LogWarning("Failed to deserialize request body");
+			Log.DeserializationFailed(logger);
 			return Results.BadRequest("Invalid request body");
 		}
 
 		var context = payload.Data.AuthenticationContext;
 
-		// Validate correlation ID
+		// -------------------------------------------------------------------------
+		// 3. Validate required fields
+		// -------------------------------------------------------------------------
+
 		if (string.IsNullOrWhiteSpace(context.CorrelationId)) {
-			logger.LogWarning("Missing CorrelationId in request");
+			Log.MissingCorrelationId(logger);
 			return Results.BadRequest("Missing CorrelationId");
 		}
 
-		// Validate user ID
 		if (string.IsNullOrWhiteSpace(context.User.Id)) {
-			logger.LogWarning("Missing User Id in request");
+			Log.MissingUserId(logger);
 			return Results.BadRequest("Missing User Id");
 		}
 
-		// Validate calling app is allowed
+		// -------------------------------------------------------------------------
+		// 4. Validate calling app is on the allowlist
+		// -------------------------------------------------------------------------
+
 		var config = options.Value;
 		var allowedApps = config.GetAllowedAppIdSet();
 		if (!allowedApps.Contains(context.ClientServicePrincipal.AppId)) {
-			logger.LogWarning("App '{AppId}' is not in the allowed list", context.ClientServicePrincipal.AppId);
+			Log.AppNotAllowed(logger, context.ClientServicePrincipal.AppId);
 			return Results.Forbid();
 		}
 
-		if (logger.IsEnabled(LogLevel.Information)) {
-			logger.LogInformation(
-		  "Issuing default role '{Role}' for user '{UserId}' (correlation: {CorrelationId})",
-		  config.DefaultRole, context.User.Id, context.CorrelationId);
+		// -------------------------------------------------------------------------
+		// 5. Provision user
+		// -------------------------------------------------------------------------
+
+		var claimsContext = new EntraClaimsContext {
+			EntraUserId = context.User.Id,
+			CorrelationId = context.CorrelationId,
+			ClientAppId = context.ClientServicePrincipal.AppId,
+			Email = context.User.Mail
+		};
+
+		var provisioner = services.GetRequiredService<IEntraUserProvisioner>();
+		ProvisionResult provisionResult;
+		try {
+			provisionResult = await provisioner.ProvisionAsync(claimsContext, cancellationToken);
+		} catch (Exception ex) {
+			Log.ProvisionerFailed(logger, ex, claimsContext.EntraUserId);
+			return Results.Problem("User provisioning failed.", statusCode: 500);
 		}
 
-		// Return the custom claims response
+		// -------------------------------------------------------------------------
+		// 6. Map provision result to roles
+		// -------------------------------------------------------------------------
+
+		if (provisionResult is ProvisionResult.Denied) {
+			Log.UserDenied(logger, claimsContext.EntraUserId);
+			return Results.Forbid();
+		}
+
+		if (provisionResult is not ProvisionResult.Allowed { Roles: { Count: > 0 } roles }) {
+			if (provisionResult is ProvisionResult.Allowed) {
+				Log.ProvisionerAllowedWithNoRoles(logger, claimsContext.EntraUserId);
+			} else {
+				Log.ProvisionerFailed(logger, null, claimsContext.EntraUserId);
+			}
+			return Results.Problem("User provisioning failed.", statusCode: 500);
+		}
+
+		var rolesString = string.Join(", ", roles);
+		Log.IssuingRoles(logger, rolesString, context.User.Id, context.CorrelationId);
+
+		// -------------------------------------------------------------------------
+		// 7. Build and return response
+		// -------------------------------------------------------------------------
+
 		var response = new EntraClaimsResponse {
 			Data = new EntraResponseData {
 				Actions = [
-			  new EntraTokenAction {
-			Claims = new EntraCustomClaims {
-			  CorrelationId = context.CorrelationId,
-			  CustomRoles = [config.DefaultRole]
-			}
-		  }
-			]
+					new EntraTokenAction {
+						Claims = new EntraCustomClaims {
+							CorrelationId = context.CorrelationId,
+							CustomRoles = [.. roles]
+						}
+					}
+				]
 			}
 		};
 
@@ -85,7 +137,42 @@ internal sealed class EntraClaimsHandler(
 			EntraClaimsJsonContext.Default.EntraClaimsResponse);
 
 		return Results.Content(json, "application/json");
+	}
 
+	// -------------------------------------------------------------------------
+	// Logging
+	// -------------------------------------------------------------------------
+
+	private static partial class Log {
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Missing Authorization header.")]
+		internal static partial void MissingAuthorizationHeader(ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Invalid Authorization token.")]
+		internal static partial void InvalidToken(ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Failed to deserialize request body.")]
+		internal static partial void DeserializationFailed(ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Missing CorrelationId in request.")]
+		internal static partial void MissingCorrelationId(ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Missing User Id in request.")]
+		internal static partial void MissingUserId(ILogger logger);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "App '{AppId}' is not in the allowed list.")]
+		internal static partial void AppNotAllowed(ILogger logger, string appId);
+
+		[LoggerMessage(Level = LogLevel.Information, Message = "User '{UserId}' was denied by provisioner. Blocking token issuance.")]
+		internal static partial void UserDenied(ILogger logger, string userId);
+
+		[LoggerMessage(Level = LogLevel.Warning, Message = "Provisioner returned Allowed with no roles for user '{UserId}'. Blocking token issuance.")]
+		internal static partial void ProvisionerAllowedWithNoRoles(ILogger logger, string userId);
+
+		[LoggerMessage(Level = LogLevel.Error, Message = "Provisioner failed for user '{UserId}'. Blocking token issuance.")]
+		internal static partial void ProvisionerFailed(ILogger logger, Exception? ex, string userId);
+
+		[LoggerMessage(Level = LogLevel.Information, Message = "Issuing roles '{Roles}' for user '{UserId}' (correlation: {CorrelationId}).")]
+		internal static partial void IssuingRoles(ILogger logger, string roles, string userId, string correlationId);
 	}
 
 }

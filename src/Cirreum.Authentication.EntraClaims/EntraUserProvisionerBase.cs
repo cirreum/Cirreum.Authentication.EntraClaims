@@ -69,6 +69,7 @@ namespace Cirreum.Authentication.EntraClaims;
 /// }
 /// </code>
 /// </example>
+[Obsolete("Use UserProvisionerBase<TUser> from Cirreum.Identity.EntraExternalId instead.")]
 public abstract class EntraUserProvisionerBase<TUser> : IEntraUserProvisioner
 	where TUser : IEntraProvisionedUser {
 

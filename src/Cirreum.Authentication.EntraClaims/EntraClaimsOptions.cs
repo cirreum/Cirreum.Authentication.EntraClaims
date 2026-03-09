@@ -8,6 +8,7 @@ namespace Cirreum.Authentication.EntraClaims;
 /// See SETUP.md for full configuration instructions, Azure Portal setup steps,
 /// and troubleshooting guidance.
 /// </remarks>
+[Obsolete("Use EntraExternalIdOptions from Cirreum.Identity.EntraExternalId instead.")]
 public sealed class EntraClaimsOptions {
 
 	/// <summary>

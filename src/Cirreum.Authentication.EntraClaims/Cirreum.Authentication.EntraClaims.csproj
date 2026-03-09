@@ -2,8 +2,9 @@
 
   <PropertyGroup>
     <RootNamespace>Cirreum.Authentication.EntraClaims</RootNamespace>
-    <Description>Entra External ID custom authentication extension for token enrichment (onTokenIssuanceStart). Provides a configurable anonymous endpoint that validates Entra callbacks and returns custom role claims for new user sign-ups.</Description>
+    <Description>[Deprecated] Use Cirreum.Identity.EntraExternalId instead. Entra External ID custom authentication extension for token enrichment (onTokenIssuanceStart).</Description>
     <PackageTags>entra;authentication;claims;blazor;minimal-api</PackageTags>
+    <NoWarn>$(NoWarn);CS0618</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

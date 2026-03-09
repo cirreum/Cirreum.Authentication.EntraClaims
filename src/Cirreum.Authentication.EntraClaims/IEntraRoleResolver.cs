@@ -19,6 +19,7 @@ namespace Cirreum.Authentication.EntraClaims;
 /// Register via <c>builder.AddEntraClaimsEnrichment&lt;TResolver&gt;()</c>.
 /// </para>
 /// </remarks>
+[Obsolete("Use IRoleResolver from Cirreum.AuthorizationProvider instead, registered via AddRoleResolver<T>() in Cirreum.Runtime.Authorization.")]
 public interface IEntraRoleResolver {
 
 	/// <summary>

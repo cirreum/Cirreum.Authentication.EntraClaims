@@ -22,6 +22,7 @@ using Microsoft.Extensions.Hosting;
 /// Both methods share the same configuration section.
 /// </para>
 /// </remarks>
+[Obsolete("Use AddRoleResolver<T>() from Cirreum.Runtime.Authorization instead.")]
 public static class EntraClaimsEnrichmentExtensions {
 
 	// -------------------------------------------------------------------------

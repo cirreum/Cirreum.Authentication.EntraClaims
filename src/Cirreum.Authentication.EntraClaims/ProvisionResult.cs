@@ -10,6 +10,7 @@ namespace Cirreum.Authentication.EntraClaims;
 ///   <item><description><see cref="Deny()"/> — block token issuance for this user</description></item>
 /// </list>
 /// </remarks>
+[Obsolete("Use ProvisionResult from Cirreum.Identity.EntraExternalId instead.")]
 public abstract record ProvisionResult {
 
 	// Private constructor prevents subclassing outside this type.

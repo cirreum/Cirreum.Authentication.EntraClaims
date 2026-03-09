@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 /// See SETUP.md for full Azure Portal configuration, appsettings.json reference,
 /// and troubleshooting guidance.
 /// </remarks>
+[Obsolete("Use EntraExternalIdExtensions from Cirreum.Identity.EntraExternalId instead.")]
 public static class EntraClaimsExtensions {
 
 	// Sentinel registered alongside the provisioner so MapEntraClaims can validate

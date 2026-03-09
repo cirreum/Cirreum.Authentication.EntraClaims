@@ -4,6 +4,7 @@ namespace Cirreum.Authentication.EntraClaims;
 /// Provides context about the user and calling application during Entra token issuance.
 /// Passed to <see cref="IEntraUserProvisioner"/> during the onTokenIssuanceStart callback.
 /// </summary>
+[Obsolete("Use ProvisionContext from Cirreum.Identity.EntraExternalId instead.")]
 public sealed class EntraClaimsContext {
 
 	/// <summary>
